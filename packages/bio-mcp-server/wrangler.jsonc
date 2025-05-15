@@ -28,7 +28,13 @@
 	},
 	"observability": {
 		"enabled": true
-	}
+	},
+    "kv_namespaces": [
+    {
+      "binding": "biography",
+      "id": "04fc6632b0664575a8424f52d634459c"
+    },
+  ],
 	/**
 	 * Smart Placement
 	 * Docs: https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement
