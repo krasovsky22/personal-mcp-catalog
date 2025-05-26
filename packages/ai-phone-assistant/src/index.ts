@@ -57,7 +57,7 @@ app.get(
     let markQueue = [];
     let responseStartTimestampTwilio = null;
     let openAiWs = new WebSocket(
-      'wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17',
+      'wss://api.openai.com/v1/realtime?model=gpt-4o-mini-realtime-preview-2024-12-17',
       [
         'realtime',
         // Auth
@@ -66,6 +66,8 @@ app.get(
         'openai-beta.realtime-v1',
       ]
     );
+
+    let localWs = null;
 
     openAiWs.addEventListener('open', () => {
       console.log('Connected to realtime API');
@@ -76,10 +78,12 @@ app.get(
     openAiWs.addEventListener('message', (event) => {
       try {
         const response = JSON.parse(event.data.toString());
-        console.log(`Received event: ${response.type}`, response);
 
         if (LOG_EVENT_TYPES.includes(response.type)) {
-          console.log(`Received event: ${response.type}`, response);
+          console.log(
+            `Received event: ${response.type}`,
+            JSON.stringify(response, null, 2)
+          );
         }
 
         if (response.type === 'response.audio.delta' && response.delta) {
@@ -88,9 +92,10 @@ app.get(
             streamSid: streamSid,
             media: { payload: response.delta },
           };
-
-          console.log('sending response audio delta:', audioDelta);
-          connection.send(JSON.stringify(audioDelta));
+          if (localWs) {
+            localWs.send(JSON.stringify(audioDelta));
+            sendMark(localWs, streamSid);
+          }
 
           // First delta from a new response starts the elapsed time counter
           if (!responseStartTimestampTwilio) {
@@ -104,12 +109,10 @@ app.get(
           if (response.item_id) {
             lastAssistantItem = response.item_id;
           }
-
-          sendMark(connection, streamSid);
         }
 
         if (response.type === 'input_audio_buffer.speech_started') {
-          handleSpeechStartedEvent(connection);
+          if (localWs) handleSpeechStartedEvent(localWs);
         }
       } catch (error) {
         console.error(
@@ -177,7 +180,7 @@ app.get(
     };
 
     // Handle interruption when the caller's speech starts
-    const handleSpeechStartedEvent = (connection) => {
+    const handleSpeechStartedEvent = (ws) => {
       if (markQueue.length > 0 && responseStartTimestampTwilio != null) {
         const elapsedTime = latestMediaTimestamp - responseStartTimestampTwilio;
         if (SHOW_TIMING_MATH)
@@ -200,7 +203,7 @@ app.get(
           openAiWs.send(JSON.stringify(truncateEvent));
         }
 
-        connection.send(
+        ws.send(
           JSON.stringify({
             event: 'clear',
             streamSid: streamSid,
@@ -215,7 +218,7 @@ app.get(
     };
 
     // Send mark messages to Media Streams so we know if and when AI response playback is finished
-    const sendMark = (connection, streamSid) => {
+    const sendMark = (ws, streamSid) => {
       if (streamSid) {
         const markEvent = {
           event: 'mark',
@@ -224,13 +227,14 @@ app.get(
         };
 
         console.log('sending mark event:', markEvent);
-        connection.send(JSON.stringify(markEvent));
+        ws.send(JSON.stringify(markEvent));
         markQueue.push('responsePart');
       }
     };
 
     return {
       onMessage(event, ws) {
+        localWs = ws;
         try {
           const data = JSON.parse(event.data);
 
