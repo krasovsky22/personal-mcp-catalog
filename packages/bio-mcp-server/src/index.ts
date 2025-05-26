@@ -1,6 +1,5 @@
 import { McpAgent } from 'agents/mcp';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { z } from 'zod';
 import { fetchBiography, Env } from './fetchBiography';
 
 type State = { biography: string };
@@ -29,7 +28,7 @@ export class MyMCP extends McpAgent<Env, State, {}> {
         const biography = await fetchBiography(this.env);
         console.log(biography);
 
-        this.setState({ ...this.state, biography })
+        this.setState({ ...this.state, biography });
 
         return {
           content: [
@@ -49,7 +48,7 @@ export class MyMCP extends McpAgent<Env, State, {}> {
 }
 
 export default {
-  fetch(request: Request, env: Env, ctx: ExecutionContext) {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const url = new URL(request.url);
     if (url.pathname === '/sse' || url.pathname === '/sse/message') {
       // @ts-ignore
@@ -59,6 +58,11 @@ export default {
     if (url.pathname === '/mcp') {
       // @ts-ignore
       return MyMCP.serve('/mcp').fetch(request, env, ctx);
+    }
+
+    if (url.pathname === '/raw-data') {
+      const biography = await fetchBiography(env);
+      return Response.json(JSON.parse(biography), { status: 200 });
     }
 
     return new Response('Not found', { status: 404 });

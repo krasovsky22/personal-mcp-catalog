@@ -5,7 +5,7 @@ const MODEL = 'gpt-4o-realtime-preview';
 const VOICE = 'alloy'; // OpenAI voice option
 const SYSTEM_MESSAGE = `You are a helpful assistant. You will be advocating on behalf of Vlad Krasovski.
 You can only answer questions related to Vlad Krasovski and his biography and work experience.
-You can only answer question based on technical biography provided by biography service.
+You can only answer question based on technical biography..
 You should always show Vlad Krasovski from positive side to help him get hired.
 You are not allowed to answer any other questions.
 You are not allowed to provide any information about yourself.
@@ -29,6 +29,13 @@ const SHOW_TIMING_MATH = false;
 
 app.get('/', (c) => {
   return c.text('Welcome to the AI Phone Assistant!');
+});
+
+app.get('/data', async (c) => {
+  const response = await fetch(c.env.BIOGRAPHY_MCP_SERVER);
+  const biography = await response.json();
+  console.log(biography);
+  return c.json(biography);
 });
 
 app.all('/incoming-calls', async (c) => {
@@ -77,8 +84,30 @@ app.get(
       setTimeout(sendSessionUpdate, 1000); // Ensure connectivity stability
     });
 
+    const handleLoadBiography = async (output) => {
+      if (
+        output?.type === 'function_call' &&
+        output?.name === 'load_biography' &&
+        output?.call_id
+      ) {
+        const response = await fetch(c.env.BIOGRAPHY_MCP_SERVER);
+        const biography = await response.json();
+
+        console.log(biography);
+
+        return {
+          type: 'conversation.item.create',
+          item: {
+            call_id: output.call_id,
+            type: 'function_call_output',
+            output: biography,
+          },
+        };
+      }
+    };
+
     // Listen for messages from the OpenAI WebSocket (and send to Twilio if necessary)
-    openAiWs.addEventListener('message', (event) => {
+    openAiWs.addEventListener('message', async (event) => {
       try {
         const response = JSON.parse(event.data.toString());
 
@@ -87,6 +116,13 @@ app.get(
             `Received event: ${response.type}`,
             JSON.stringify(response, null, 2)
           );
+
+          if (response.type === 'response.done') {
+            const output = response.response?.output?.[0];
+
+            const biographyResponse = await handleLoadBiography(output);
+            openAiWs.send(JSON.stringify(biographyResponse));
+          }
         }
 
         if (response.type === 'response.audio.delta' && response.delta) {
@@ -147,15 +183,21 @@ app.get(
           instructions: SYSTEM_MESSAGE,
           modalities: ['text', 'audio'],
           temperature: 0.8,
+          tool_choice: 'auto',
           tools: [
             {
-              type: 'mcp',
-              server_label: 'Vlad_Bio_Mcp_Server',
-              description:
-                'Provides biography information about Vlad Krasovski',
-              server_url: c.env.BIOGRAPHY_MCP_SERVER,
-              allowed_tools: ['biography_provider'],
-              require_approval: 'never',
+              type: 'function',
+              name: 'load_biography',
+              description: 'Load biography',
+              parameters: {
+                type: 'object',
+                properties: {
+                  name: {
+                    type: 'string',
+                    description: 'Who are you calling about?',
+                  },
+                },
+              },
             },
           ],
         },
