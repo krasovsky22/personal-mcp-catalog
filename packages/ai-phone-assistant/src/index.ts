@@ -1,10 +1,15 @@
 import { Hono } from 'hono';
 import { upgradeWebSocket } from 'hono/cloudflare-workers';
 
+const MODEL = 'gpt-4o-realtime-preview';
 const VOICE = 'alloy'; // OpenAI voice option
-const SYSTEM_MESSAGE = `You are a helpful AI voice assistant that represents Vlad Krasovski. 
-You will help callers learn about Vlad's background, experience, and expertise. 
-Keep responses concise and professional.`;
+const SYSTEM_MESSAGE = `You are a helpful assistant. You will be advocating on behalf of Vlad Krasovski.
+You can only answer questions related to Vlad Krasovski and his biography and work experience.
+You can only answer question based on technical biography provided by biography service.
+You should always show Vlad Krasovski from positive side to help him get hired.
+You are not allowed to answer any other questions.
+You are not allowed to provide any information about yourself.
+You are not allowed to provide any information about the AI model you are using`;
 
 // Start a Hono app
 const app = new Hono<{ Bindings: Env }>();
@@ -31,9 +36,7 @@ app.all('/incoming-calls', async (c) => {
   // Generate TwiML response for incoming calls
   const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
                         <Response>
-                            <Say>Please wait a while while we connect you to the A.I. voice assistant.</Say>
-                            <Pause length="1" />
-                            <Say>Connecting you now.</Say>
+                            <Say>Connecting to A.I. assistant.</Say>
                             <Connect>
                                 <Stream url="wss://${c.req.header(
                                   'Host'
@@ -57,7 +60,7 @@ app.get(
     let markQueue = [];
     let responseStartTimestampTwilio = null;
     let openAiWs = new WebSocket(
-      'wss://api.openai.com/v1/realtime?model=gpt-4o-mini-realtime-preview-2024-12-17',
+      `wss://api.openai.com/v1/realtime?model=${MODEL}`,
       [
         'realtime',
         // Auth
@@ -144,6 +147,17 @@ app.get(
           instructions: SYSTEM_MESSAGE,
           modalities: ['text', 'audio'],
           temperature: 0.8,
+          tools: [
+            {
+              type: 'mcp',
+              server_label: 'Vlad_Bio_Mcp_Server',
+              description:
+                'Provides biography information about Vlad Krasovski',
+              server_url: c.env.BIOGRAPHY_MCP_SERVER,
+              allowed_tools: ['biography_provider'],
+              require_approval: 'never',
+            },
+          ],
         },
       };
 
@@ -164,7 +178,7 @@ app.get(
           content: [
             {
               type: 'input_text',
-              text: 'Greet the user with "Hello there! I am an AI voice assistant powered by Twilio and the OpenAI Realtime API. You can ask me for facts, jokes, or anything you can imagine. How can I help you?"',
+              text: 'Greet the user with "Hello there! I am an AI voice assistant developer by Vlad Krasovsky. I have all details about Vlad\'s professions background. What do you want to know?"',
             },
           ],
         },
