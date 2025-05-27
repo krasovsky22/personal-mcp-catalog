@@ -13,11 +13,13 @@ You are not allowed to provide any information about the AI model you are using`
 
 // Start a Hono app
 const app = new Hono<{ Bindings: Env }>();
+
+const LOG_EVENT_RESPONSE_DONE = 'response.done';
 const LOG_EVENT_TYPES = [
   'error',
   'response.content.done',
   'rate_limits.updated',
-  'response.done',
+  LOG_EVENT_RESPONSE_DONE,
   'input_audio_buffer.committed',
   'input_audio_buffer.speech_stopped',
   'input_audio_buffer.speech_started',
@@ -61,7 +63,9 @@ app.get(
   upgradeWebSocket((c) => {
     console.log('WebSocket connection established with statusCode');
 
+    let callSid = null;
     let streamSid = null;
+    let accountSid = null;
     let latestMediaTimestamp = 0;
     let lastAssistantItem = null;
     let markQueue = [];
@@ -93,17 +97,17 @@ app.get(
         const response = await fetch(c.env.BIOGRAPHY_MCP_SERVER);
         const biography = await response.json();
 
-        console.log(biography);
-
         return {
           type: 'conversation.item.create',
           item: {
             call_id: output.call_id,
             type: 'function_call_output',
-            output: biography,
+            output: JSON.stringify(biography),
           },
         };
       }
+
+      return null;
     };
 
     // Listen for messages from the OpenAI WebSocket (and send to Twilio if necessary)
@@ -117,11 +121,25 @@ app.get(
             JSON.stringify(response, null, 2)
           );
 
-          if (response.type === 'response.done') {
+          if (response.type === LOG_EVENT_RESPONSE_DONE) {
+            const responseStatus = response.response?.status;
+
+            if (responseStatus === 'failed') {
+              console.error('OpenAI response failed:', response.response);
+
+              // Send error message to the user before hanging up
+              if (localWs && streamSid) {
+                // Wait 2 seconds for the message to play before hanging up
+                setTimeout(() => hangupCall(localWs, streamSid), 2000);
+              }
+              return;
+            }
             const output = response.response?.output?.[0];
 
             const biographyResponse = await handleLoadBiography(output);
-            openAiWs.send(JSON.stringify(biographyResponse));
+            if (biographyResponse) {
+              openAiWs.send(JSON.stringify(biographyResponse));
+            }
           }
         }
 
@@ -160,6 +178,12 @@ app.get(
           'Raw message:',
           event.data
         );
+
+        // Handle critical error by notifying user and hanging up
+        if (localWs && streamSid) {
+          // Wait 2 seconds for the message to play before hanging up
+          setTimeout(() => hangupCall(localWs, streamSid), 2000);
+        }
       }
     });
 
@@ -288,6 +312,23 @@ app.get(
       }
     };
 
+    // Function to hang up a Twilio call from the WebSocket stream
+    const hangupCall = async (ws, streamSid) => {
+      if (streamSid && ws) {
+        console.log(`Hanging up call with streamSid: ${streamSid}`);
+        const hangupEvent = {
+          event: 'stop',
+          streamSid: streamSid,
+          stop: {
+            accountSid,
+            callSid,
+          },
+        };
+
+        ws.send(JSON.stringify(hangupEvent));
+      }
+    };
+
     return {
       onMessage(event, ws) {
         localWs = ws;
@@ -312,7 +353,9 @@ app.get(
               break;
 
             case 'start':
+              callSid == data.start.callSid;
               streamSid = data.start.streamSid;
+              accountSid = data.start.accountSid;
               console.log('Incoming stream has started', streamSid);
 
               // Reset start and media timestamp on a new stream
