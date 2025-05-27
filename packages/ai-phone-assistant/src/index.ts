@@ -1,11 +1,13 @@
 import { Hono } from 'hono';
 import { upgradeWebSocket } from 'hono/cloudflare-workers';
 
-const MODEL = 'gpt-4o-realtime-preview';
-const VOICE = 'alloy'; // OpenAI voice option
-const SYSTEM_MESSAGE = `You are a helpful assistant. You will be advocating on behalf of Vlad Krasovski.
+const MODEL = 'gpt-4o-mini-realtime-preview';
+const VOICE = 'verse'; // OpenAI voice option
+const SYSTEM_MESSAGE = `You are a helpful assistant for Vlad Krasovski. His full name is Vladislav Krasovski. 
+You will be advocating on behalf of Vlad Krasovski.
 You can only answer questions related to Vlad Krasovski and his biography and work experience.
-You can only answer question based on technical biography..
+You can only answer question based on technical biography.
+When any question is asked, it always about Vlad Krasovski.
 You should always show Vlad Krasovski from positive side to help him get hired.
 You are not allowed to answer any other questions.
 You are not allowed to provide any information about yourself.
@@ -41,7 +43,6 @@ app.get('/data', async (c) => {
 });
 
 app.all('/incoming-calls', async (c) => {
-  console.log('Incoming call received:', c);
   // Generate TwiML response for incoming calls
   const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
                         <Response>
@@ -244,7 +245,7 @@ app.get(
           content: [
             {
               type: 'input_text',
-              text: 'Greet the user with "Hello there! I am an AI voice assistant developer by Vlad Krasovsky. I have all details about Vlad\'s professions background. What do you want to know?"',
+              text: 'Greet the user with "Hello there! I am an AI voice assistant developed by Vlad. What do you want to know?"',
             },
           ],
         },
@@ -306,7 +307,6 @@ app.get(
           mark: { name: 'responsePart' },
         };
 
-        console.log('sending mark event:', markEvent);
         ws.send(JSON.stringify(markEvent));
         markQueue.push('responsePart');
       }
