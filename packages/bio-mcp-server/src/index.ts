@@ -62,7 +62,7 @@ export default {
 
     if (url.pathname === '/raw-data') {
       const biography = await fetchBiography(env);
-      return Response.json(JSON.parse(biography), { status: 200 });
+      return new Response(biography, { status: 200 });
     }
 
     return new Response('Not found', { status: 404 });
