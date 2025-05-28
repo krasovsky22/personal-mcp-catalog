@@ -9,7 +9,6 @@ You can only answer questions related to Vlad Krasovski and his biography and wo
 When any question is asked, it always about Vlad Krasovski.
 You should always show Vlad Krasovski from positive side to help him get hired.
 You are not allowed to answer any other questions not related to Vladislav Krasovski.
-You are not allowed to provide current or previous employment information.
 You are not allowed to provide any information about yourself.
 You are not allowed to provide any information about the AI model you are using`;
 
@@ -51,7 +50,7 @@ app.all('/incoming-calls', async (c) => {
                                 <Stream url="wss://${c.req.header(
                                   'Host'
                                 )}/media-stream" />
-                            </Connect>    
+                            </Connect>
                         </Response>`;
 
   return c.text(twimlResponse, 200, {
@@ -96,14 +95,14 @@ app.get(
         output?.call_id
       ) {
         const response = await fetch(c.env.BIOGRAPHY_MCP_SERVER);
-        const biography = await response.json();
+        const biography = await response.text();
 
         return {
           type: 'conversation.item.create',
           item: {
             call_id: output.call_id,
             type: 'function_call_output',
-            output: JSON.stringify(biography),
+            output: biography,
           },
         };
       }
@@ -213,15 +212,11 @@ app.get(
             {
               type: 'function',
               name: 'load_biography',
-              description: 'Load biography',
+              description:
+                'Vlad Krasovsky initial biography and summary if his personal and professions background',
               parameters: {
                 type: 'object',
-                properties: {
-                  name: {
-                    type: 'string',
-                    description: 'Who are you calling about?',
-                  },
-                },
+                properties: {},
               },
             },
           ],
