@@ -36,7 +36,7 @@ export class OpenAISession {
   private state = {
     lastAssistantItem: null,
     latestMediaTimestamp: 0,
-    responseStartTimestampTwilio: null,
+    responseStartTimestampTwilio: 0,
   };
 
   constructor(twilioService) {
@@ -182,14 +182,13 @@ export class OpenAISession {
 
   // when person started talking
   handleSpeechStartedEvent() {
-    if (this.state.responseStartTimestampTwilio != null) {
+    if (this.state.responseStartTimestampTwilio) {
       const elapsedTime =
         this.state.latestMediaTimestamp -
         this.state.responseStartTimestampTwilio;
 
-      console.log(this.state);
-
-      if (this.state.lastAssistantItem) {
+      // Only truncate if we have a positive elapsed time and an assistant item
+      if (this.state.lastAssistantItem && elapsedTime > 0) {
         this.sendTruncateEvent(this.state.lastAssistantItem, elapsedTime);
       }
 
@@ -219,7 +218,7 @@ export class OpenAISession {
     this.state = {
       lastAssistantItem: null,
       latestMediaTimestamp: 0,
-      responseStartTimestampTwilio: null,
+      responseStartTimestampTwilio: 0,
     };
   }
 
